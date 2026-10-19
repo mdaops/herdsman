@@ -76,8 +76,9 @@ Herdsman-managed interactive workers are bidirectional by default: later assignm
 need coordinator-to-worker delivery as well as return reporting. When the runtime is available
 and launch/setup is authorized, start CC with the documented channel flag, preserve the requested
 model, and verify consent/registration. A bare CC launch or skill reload is not receiving readiness.
-The custom development-channel flag prompts on launch; do not promise unattended startup or
-simulate human confirmation. Current documented Pro/Max configuration has no persistent custom
+The custom development-channel flag prompts on launch. Default to human confirmation. Only an
+explicit matching user delegation permits the narrowly checked procedure below; installing this
+skill is not that delegation. Current documented Pro/Max configuration has no persistent custom
 channel approval. Approved plugins/organization policy are a separate supported provisioning path,
 not a reason to change policy or bypass tool permissions implicitly.
 Use sender-only mode only when explicitly chosen; do not assume it for a managed worker.
@@ -98,13 +99,49 @@ Read and verify it against the intended live worker; never overwrite a different
 
 For an existing CC worker without a channel, an authorized stop/resume must preserve its exact
 conversation ID, cwd, model and work. Use --resume with that ID plus the channel flag, not a new
-conversation. Check for unsent drafts and ongoing work first; report real consent prompts for
-the human rather than answering them. Skill/plugin reload does not add startup channel flags.
+conversation. Check for unsent drafts and ongoing work first. Apply delegated startup confirmation
+only when its recorded authority and all guards below match; otherwise stop for the human.
+Skill/plugin reload does not add startup channel flags.
 
 Verify delivery with a bounded, previously authorized fixture before claiming two-way readiness.
 The worker must reconcile and reply; HTTP acceptance alone is not model processing. Initial setup
 is separate from asynchronous notification and must not submit or discard a human draft.
 Do not continue product implementation from a runtime-verification fixture.
+
+### Narrowly delegated development-channel confirmation
+
+A user may explicitly authorize the coordinator to confirm this one known local startup dialog.
+The default remains no delegation. Look for a task-linked authority record and a machine-local
+grant such as local/herdsman/channel-consent.json in the plans checkout. Verify the underlying
+user authorization, its machine/install scope and any revocation; do not infer approval from a
+file's name, the presence of this skill or a worker wake. Never copy a grant onto another machine.
+
+For each authorized managed worker launch/resume, perform all checks before confirming:
+
+1. Read the herdr skill and verify runtime-control authorization and HERDR_ENV=1. Inspect the
+   exact returned worker pane/session and foreground process, not the focused pane. Its cwd,
+   model, resume ID when applicable, and launch argv must match the intended authorized worker.
+2. Verify the effective herdsman MCP server for that worker, including project/CLI overrides.
+   It must resolve to the user's approved local checkout and command from the grant. A matching
+   server name alone is insufficient. Unknown overrides, changed provenance or remote servers
+   require human review; do not weaken policy or impersonate an approved marketplace plugin.
+3. Read the current blocked screen. It must be exactly the development-channel warning headed
+   "WARNING: Loading development channels", list only "Channels: server:herdsman", and have
+   "I am using this for local development" selected. No additional channels or consent dialogs
+   are covered. If the text, selection or foreground identity differs, stop and ask.
+4. With that narrow user delegation, confirm that option once in that exact worker session.
+   Do not paste a command, send a blanket yes, or loop on Enter. Preserve drafts and human focus.
+   This is an authorized startup action, never a terminal-based asynchronous notification.
+5. Observe the result. Stop at any further prompt. Project trust, new MCP server approval,
+   tool permissions, other channels, changed warning text and uncertain outcomes are NOT covered.
+   Verify registration and bounded receiving behavior before declaring the worker ready.
+6. Record the grant reference, target identity, verified server/launch, exact prompt match,
+   single confirmation attempt and observed result in ignored local setup evidence. Record
+   uncertainty rather than retrying blindly. Revocation stops subsequent confirmations.
+
+This is coordinator-executed, user-delegated setup, not a Claude auto-approval setting or a
+background dialog watcher. It does not authorize new launches, restarts, product work, permission
+bypasses or organizational-policy changes. Without a verified matching grant, ask the human.
 
 ### Coordinator-to-worker updates
 
@@ -153,6 +190,21 @@ Never fall back to the unpinned direct spike sender when named routing fails. A 
 cannot be woken; no automatic launcher, remote transport, queue or scheduler is provided.
 
 ## Reviews and planning
+
+When reconciling a material worker return, decide whether the human now needs an artifact review;
+do not stop at your own source inspection and a PR link. For authorized ongoing coordination, a
+coherent completed code revision normally gets a code review even if activation/credentials remain
+blocked. A substantive plan/design needing human input gets feedback-only annotation; an approval
+gate requires explicit acceptance authority. Receiver-only probes and duplicate wakes need no new
+surface. Reuse matching open reviews or saved decisions instead of reopening the same revision.
+
+Apply the installed coordinator-start/review-checkpoint.md guidance when available. Before reporting
+ready work, record the exact revision's review disposition in the existing plan: open (review ID and
+local URL pointer), already reviewed (decision reference), blocked (actual opening failure),
+deferred
+(reason, owner and next trigger), or not needed (no new artifact or explicit waiver). Deployment
+prerequisites alone do not justify deferring code review. Notify the human with the live link or the
+concrete reason it was not opened. This is workflow guidance, not a runtime-enforced stop hook.
 
 Read the available Plannotator skill when using its interfaces. For Herdsman's owned lifecycle,
 use an existing named binding and select the correct mode:

@@ -251,8 +251,9 @@ Custom Channels require explicit consent and supported Anthropic authentication/
 account policy. The development flag enables the research-preview channel, not
 unattended tool approval. It also presents a development-channel confirmation on
 launch. Current official documentation provides no per-user persistent approval
-for a custom channel on Pro/Max. Do not automate confirmation keystrokes or disable
-ordinary tool permissions to hide this separate setup requirement.
+for a custom channel on Pro/Max. Default to human confirmation. A user can separately
+delegate the exact known local startup confirmation to their coordinator, subject to
+the checks below. Never disable ordinary tool permissions to hide this requirement.
 
 The supported non-development path is an approved channel plugin: Anthropic's
 allowlist, or a Team/Enterprise administrator's `allowedChannelPlugins` policy.
@@ -269,6 +270,25 @@ skills does not add startup channel flags to an already-running process.
 
 The project-local `.mcp.example.json` remains an alternative when launching from
 this checkout with an explicit MCP config.
+
+### Optional delegated startup confirmation
+
+A user may give a narrow standing authorization for their coordinator to confirm
+only the development-channel warning for their trusted local Herdsman receiver.
+This is not a built-in Claude approval setting. Installing Herdsman or this skill
+creates no such authorization; no generic auto-accept loop is installed.
+
+The [skill](skills/herdsman/SKILL.md) specifies the checks: verify the recorded grant
+for this machine, intended worker/process/launch, effective MCP command and trusted
+checkout, and the exact blocked warning listing only `server:herdsman`. Confirm the
+selected development option once, then inspect the result and record setup evidence.
+
+Any different dialog, additional channel, unknown configuration override, changed
+provenance, unexpected foreground process or uncertain outcome stops for the human.
+Project trust, new MCP-server consent, tool permissions and organizational policy
+are outside this delegation. The grant also does not authorize a launch/restart
+that was not otherwise permitted. Keep machine-specific grants in ignored local
+state and honor revocation. Do not turn setup consent into authority for worker actions.
 
 ### Explicit sockets and migration
 
@@ -345,7 +365,8 @@ processed before claiming bidirectional readiness.
 
 For an existing CC conversation launched without a channel, an authorized restart
 must use its exact `--resume` ID, cwd and model plus the channel flag. Preserve unsent
-drafts and work, and stop at any human consent prompt. Do not replace its conversation
+drafts and work. Stop at consent prompts unless the exact development warning is
+covered by the verified narrow delegation above. Do not replace its conversation
 or substitute terminal notifications.
 
 The coordinator publishes the revised assignment first, verifies the intended
@@ -395,6 +416,19 @@ checkpoint reconciliation idempotent. Startup recovery must inspect unreviewed
 published checkpoints even when a wake was missed.
 
 ## Review and iterate in Plannotator
+
+Review is a coordinator checkpoint, not an automatic worker-exit hook. After a
+material return, distinguish your own source inspection from the human's review
+surface: ready code normally gets a frozen code review; a substantive proposal
+needing human input gets feedback-only plan annotation. Deployment prerequisites
+do not prevent source review. Explicit approval gates require separate authority.
+
+Before reporting ready work, record the exact revision's review disposition in
+its existing plan: open, already reviewed, blocked, deferred or not needed, with
+evidence/reason and next action. Give the human the live link or concrete opening
+blocker, not merely a PR URL or activation checklist. Reuse matching reviews instead
+of opening duplicates. These skill instructions improve decision-making but are
+not runtime enforcement; the CLI cannot force a coordinator to invoke it.
 
 An existing named binding supplies the coordinator's plans checkout:
 
