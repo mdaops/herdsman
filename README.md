@@ -249,13 +249,23 @@ socket or successful MCP initialization alone does not prove channel opt-in.
 
 Custom Channels require explicit consent and supported Anthropic authentication/
 account policy. The development flag enables the research-preview channel, not
-unattended tool approval. Already-running CC sessions need a restart with the
+unattended tool approval. It also presents a development-channel confirmation on
+launch. Current official documentation provides no per-user persistent approval
+for a custom channel on Pro/Max. Do not automate confirmation keystrokes or disable
+ordinary tool permissions to hide this separate setup requirement.
+
+The supported non-development path is an approved channel plugin: Anthropic's
+allowlist, or a Team/Enterprise administrator's `allowedChannelPlugins` policy.
+Merely packaging a private plugin does not approve it. See [channel controls][channels].
+Already-running CC sessions need a restart with the
 appropriate configuration to gain the receiver; do not restart unrelated work.
 
 The adapter declares only `claude/channel`: no reply tool or permission relay.
-A worker that only **sends** named updates to its coordinator needs the CLI and the
-coordinator's binding, not a CC receiver or channel opt-in of its own. Pi and CC can
-each be a coordinator or worker; the harness does not determine the role.
+Managed interactive workers should launch with receiving support by default because
+coordinators need to deliver later assignment revisions. Only explicitly sender-only
+workers need no receiver: their outbound CLI reporting works without one. Pi and CC
+can each coordinate or work; the harness does not determine the role. Refreshing CC
+skills does not add startup channel flags to an already-running process.
 
 The project-local `.mcp.example.json` remains an alternative when launching from
 this checkout with an explicit MCP config.
@@ -323,6 +333,39 @@ npm run coordinator -- unbind example/plans orion-production '<expected-instance
 Unbind removes a routing hint; it neither stops the agent nor transfers ownership.
 Reloading/restarting a receiver creates a new instance and requires a fresh binding.
 `list` distinguishes live, stale, offline and unreachable records.
+
+### Two-way worker delivery
+
+A worker is not a durable coordinator just because it receives updates. During
+initial setup, the coordinator assigns a local runtime-record path; the worker saves
+its current socket/instance from its own harness context, verifies identity, and
+records its session/assignment association there. Keep that record in ignored
+`local/` state, not in a durable profile. Confirm a bounded test event is actually
+processed before claiming bidirectional readiness.
+
+For an existing CC conversation launched without a channel, an authorized restart
+must use its exact `--resume` ID, cwd and model plus the channel flag. Preserve unsent
+drafts and work, and stop at any human consent prompt. Do not replace its conversation
+or substitute terminal notifications.
+
+The coordinator publishes the revised assignment first, verifies the intended
+worker's endpoint record, then sends a pinned wake:
+
+```sh
+npm run coordinator -- wake-receiver \
+  "$PLANS_DIR" "$WORKER_SOCKET" "$WORKER_INSTANCE" \
+  coordinator-a plans/open/example.md revision-2
+```
+
+All six arguments are required. Plans root and socket are absolute; source is an
+existing regular file relative to that root. Absolute source paths, traversal and
+escaping symlinks are rejected. The instance pin cannot be omitted. This command
+creates no profile or binding and does not infer ownership. A stale pin is rejected,
+not updated. Workers still use named `wake` to report back to their coordinator.
+
+This explicit worker route shares the same source validation and pinned transport
+as named delivery. It is **not** an automatic fallback for a failed named send.
+No durable worker directory, scheduler or broker is added.
 
 ### Delivery contract
 
@@ -429,10 +472,12 @@ braces, duplicate imports and explicit-any rejection. Formatting uses 100-column
 lines. `npm run check`, `npm run lint`, `npm run format:check` and `npm test` can also
 run separately.
 
-The current suite has **26 tests** covering transport, adapter contracts, named
+The current suite has **28 tests** covering transport, adapter contracts, named
 routing, stale/legacy receivers, source-path containment, shared-context discovery,
 fresh-checkout binding and review decision/routing behavior. Additional checks cover
 branded IDs, schema variants and injected transport without uncertain-send retries.
+Worker-route tests cover profile-free delivery, mandatory pinning, stale receivers,
+source containment and absence of registry mutations.
 Receiver-bootstrap tests cover isolated fresh Pi/CC endpoints, context publication,
 startup failure, session replacement and cleanup. Two isolated real Pi RPC processes
 also loaded the package and exposed distinct identity endpoints on Linux without
@@ -477,3 +522,4 @@ dispatches CLI commands, and `review.ts` owns review orchestration and its platf
 [pi]: https://github.com/earendil-works/pi
 [cc]: https://code.claude.com/docs/en/channels-reference
 [cc-skills]: https://code.claude.com/docs/en/skills
+[channels]: https://code.claude.com/docs/en/channels#restrict-which-channel-plugins-can-run

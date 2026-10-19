@@ -390,3 +390,113 @@ test("receiver identity, pinned-instance rejection and direct-send compatibility
     await f.cleanup();
   }
 });
+
+test("explicit worker delivery is pinned without creating a coordinator profile or binding", async () => {
+  const f = await fixture();
+  try {
+    await rm(join(f.root, "coordinators"), { recursive: true });
+    const { stdout } = await cli(
+      f.state,
+      "wake-receiver",
+      f.root,
+      f.a.socket,
+      f.a.instance,
+      event.sender,
+      event.source,
+      event.revision,
+    );
+    assert.match(stdout, /^accepted by adapter/);
+    assert.deepEqual(f.a.received, [{ ...event, source: join(f.root, event.source) }]);
+    assert.equal(f.b.received.length, 0);
+    assert.deepEqual(
+      await tree(f.state),
+      [],
+      "explicit endpoint delivery must not register a role",
+    );
+    await assert.rejects(
+      cli(
+        f.state,
+        "wake-receiver",
+        f.root,
+        f.a.socket,
+        f.b.instance,
+        event.sender,
+        event.source,
+        event.revision,
+      ),
+      /stale/,
+    );
+    assert.equal(f.a.received.length, 1, "wrong instance was not delivered");
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("worker delivery rejects missing pins and unsafe sources before notification", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      cli(
+        f.state,
+        "wake-receiver",
+        f.root,
+        f.a.socket,
+        "",
+        event.sender,
+        event.source,
+        event.revision,
+      ),
+      /instance is required/,
+    );
+    await assert.rejects(
+      cli(
+        f.state,
+        "wake-receiver",
+        "relative",
+        f.a.socket,
+        f.a.instance,
+        event.sender,
+        event.source,
+        event.revision,
+      ),
+      /absolute paths/,
+    );
+    await assert.rejects(
+      cli(
+        f.state,
+        "wake-receiver",
+        f.root,
+        "relative.sock",
+        f.a.instance,
+        event.sender,
+        event.source,
+        event.revision,
+      ),
+      /absolute paths/,
+    );
+    for (const source of [
+      "../outside.md",
+      "handoffs/escape.md",
+      "handoffs/missing.md",
+      "handoffs",
+      join(f.root, event.source),
+    ]) {
+      await assert.rejects(
+        cli(
+          f.state,
+          "wake-receiver",
+          f.root,
+          f.a.socket,
+          f.a.instance,
+          event.sender,
+          source,
+          event.revision,
+        ),
+      );
+    }
+    assert.equal(f.a.received.length, 0);
+    assert.deepEqual(await tree(f.state), []);
+  } finally {
+    await f.cleanup();
+  }
+});

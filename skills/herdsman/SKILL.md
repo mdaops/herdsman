@@ -72,14 +72,55 @@ HERDSMAN_STATE_DIR, defaulting to ~/.local/state/herdsman. Never sync them as du
 
 ## Worker reporting and wake reconciliation
 
-A worker only sending updates needs the CLI and the coordinator's verified binding, not its own
-receiver. If launching CC to receive wakes too, include the documented channel opt-in flag and
-verify consent/registration; a bare CC launch is not proof of inbound readiness.
+Herdsman-managed interactive workers are bidirectional by default: later assignment revisions
+need coordinator-to-worker delivery as well as return reporting. When the runtime is available
+and launch/setup is authorized, start CC with the documented channel flag, preserve the requested
+model, and verify consent/registration. A bare CC launch or skill reload is not receiving readiness.
+The custom development-channel flag prompts on launch; do not promise unattended startup or
+simulate human confirmation. Current documented Pro/Max configuration has no persistent custom
+channel approval. Approved plugins/organization policy are a separate supported provisioning path,
+not a reason to change policy or bypass tool permissions implicitly.
+Use sender-only mode only when explicitly chosen; do not assume it for a managed worker.
+A genuinely sender-only worker needs the CLI and coordinator binding, not its own receiver.
 
 Before dispatch, establish the worker's scope, owned files, reporting destination, publication
 permissions and authority to reconcile relevant wake hints. Supply the coordinator's namespace
 and ID, plus a source path that will exist in its plans checkout. Do not send work before the
 assignment and permission boundaries are established.
+
+### Worker readiness before product dispatch
+
+During the authorized initial setup prompt, give the worker one scoped ignored runtime-record
+path, for example local/<coordinator>/worker-receiver.json. Have it read its own receiver context,
+verify GET /identity, and save socket, instance, plansRoot, worker and session identity there.
+This local record is a routing hint, not a coordinator profile or proof of durable ownership.
+Read and verify it against the intended live worker; never overwrite a different record silently.
+
+For an existing CC worker without a channel, an authorized stop/resume must preserve its exact
+conversation ID, cwd, model and work. Use --resume with that ID plus the channel flag, not a new
+conversation. Check for unsent drafts and ongoing work first; report real consent prompts for
+the human rather than answering them. Skill/plugin reload does not add startup channel flags.
+
+Verify delivery with a bounded, previously authorized fixture before claiming two-way readiness.
+The worker must reconcile and reply; HTTP acceptance alone is not model processing. Initial setup
+is separate from asynchronous notification and must not submit or discard a human draft.
+Do not continue product implementation from a runtime-verification fixture.
+
+### Coordinator-to-worker updates
+
+Publish the revised assignment/decision before notification. Use the worker's verified local
+record and the pinned endpoint command; no durable coordinator profile is needed for a worker:
+
+```sh
+npm --prefix "$HERDSMAN_DIR" run coordinator -- wake-receiver \
+  "$PLANS_DIR" "$WORKER_SOCKET" "$WORKER_INSTANCE" "$SENDER" "$SOURCE" "$REVISION"
+```
+
+SOURCE is an existing regular file relative to PLANS_DIR, with the same containment checks as
+named wakes. The instance is mandatory. A changed receiver is rejected, never refreshed implicitly.
+Keep worker endpoints local and never guess them from temporary-file searches. This is an explicit
+worker route, not a fallback when a named coordinator send fails. Named return reporting still uses
+wake with the owning coordinator's namespace/ID. Both routes preserve the same authority boundaries.
 
 After work, save the handoff before notification. Across checkouts, publish and synchronize it
 through the authorized route first. A local-only handoff is not remotely available evidence.
