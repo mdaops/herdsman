@@ -159,9 +159,12 @@ Keep worker endpoints local and never guess them from temporary-file searches. T
 worker route, not a fallback when a named coordinator send fails. Named return reporting still uses
 wake with the owning coordinator's namespace/ID. Both routes preserve the same authority boundaries.
 
-After work, save the handoff before notification. Across checkouts, publish and synchronize it
-through the authorized route first. A local-only handoff is not remotely available evidence.
-Then send one named wake:
+Report at every stop, not only at completion. Before ending any turn (done, blocked on a
+permission or decision, or waiting on CI, review or another agent) save the handoff, then send one
+named wake. Waiting is a state to report, not a reason to defer the wake. A background task or a
+promise to continue later does not keep the coordinator informed. A later result is a revised
+handoff and a new wake. Across checkouts, publish and synchronize the handoff through the
+authorized route first. A local-only handoff is not remotely available evidence. Then wake:
 
 ```sh
 npm --prefix "$HERDSMAN_DIR" run coordinator -- wake \
@@ -184,6 +187,29 @@ and record the reviewed revision and outcome. Acknowledgment is not reconciliati
 | Stale           | Verify ownership/lifetime before explicit unbind and fresh bind.                     |
 | Rejected        | Inspect the rejection; do not silently change transport.                             |
 | Uncertain       | Inspect evidence and receiver state before considering another send. No blind retry. |
+
+### Worker stop observer
+
+Workers can still stop without reporting. When a dispatched worker runs in a Herdr pane and Herdr
+control is authorized, start one observer per worker in a persistent process after dispatch:
+
+```sh
+npm --prefix "$HERDSMAN_DIR" run coordinator -- observe \
+  "$REPOSITORY_ID" "$COORDINATOR_ID" "$WORKER" "$ASSIGNMENT_SOURCE"
+```
+
+WORKER is the worker's Herdr agent name or pane ID. ASSIGNMENT_SOURCE is an existing file relative
+to the plans root, normally the plan naming the worker's handoff; the handoff may not exist yet.
+The observer sends one named wake when the worker leaves `working` for `idle` or `done`, and when
+it becomes `blocked`. The sender is `herdr-observer:<worker>`, and the revision is
+`<status>@<time>`, so each stop is reconciled rather than deduplicated. Each outcome is logged;
+failed sends are not retried. It exits when the pane closes, exits or moves, or Herdr disconnects:
+rediscover the pane and start it again. It is not durable across restarts. Run one per worker.
+
+On an observer wake, read the worker's handoff and inspect the worker through Herdr. If the handoff
+holds new work, reconcile it as a worker return, including its review disposition. If the worker is
+blocked or stopped without reporting, notify the human with what stopped, the decision needed and
+where to act. Approve only within an explicit matching delegation; a status never grants approval.
 
 Never use terminal typing, Enter, herdr agent prompt or paste as asynchronous notification.
 Never fall back to the unpinned direct spike sender when named routing fails. A stopped process

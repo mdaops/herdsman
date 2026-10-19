@@ -1,4 +1,5 @@
 import { Effect, Match } from "effect";
+import { agentGet, follow, herdrSocket, type Lost } from "./observe.ts";
 import {
   type Binding,
   type RegistryError,
@@ -15,6 +16,7 @@ const usage = `Usage: npm run coordinator -- <command>
   wake <repository-id> <coordinator-id> <sender> <repo-relative-source> <revision>
   unbind <repository-id> <coordinator-id> <expected-instance>
   wake-receiver <absolute-plans-root> <absolute-socket> <expected-instance> <sender> <repo-relative-source> <revision>
+  observe <repository-id> <coordinator-id> <herdr-worker> <repo-relative-source>
 `;
 
 const status = Match.type<Status>().pipe(
@@ -27,7 +29,7 @@ const status = Match.type<Status>().pipe(
 );
 const name = (record: Binding) => `${record.repository} ${record.coordinator}`;
 
-const describe = Match.type<RegistryError>().pipe(
+const describe = Match.type<RegistryError | Lost>().pipe(
   Match.tagsExhaustive({
     Invalid: (error) => error.message,
     Unbound: (error) => `No binding for ${error.repository} ${error.coordinator}`,
@@ -46,6 +48,7 @@ const describe = Match.type<RegistryError>().pipe(
     Rejected: (error) => `Receiver rejected the request (HTTP ${error.status}): ${error.message}`,
     Uncertain: (error) =>
       `Delivery outcome uncertain: ${error.cause}. Reconcile before resending; do not retry blindly`,
+    Lost: (error) => error.message,
   }),
 );
 
@@ -57,6 +60,7 @@ const arity: Record<string, [number, number]> = {
   wake: [5, 5],
   unbind: [3, 3],
   "wake-receiver": [6, 6],
+  observe: [4, 4],
 };
 const run = Effect.gen(function* () {
   const registry = yield* Registry;
@@ -110,6 +114,30 @@ const run = Effect.gen(function* () {
         { plansRoot, socket, instance },
         { sender, source, revision },
       );
+    }
+    case "observe": {
+      // Long-running: one wake per worker stop, each outcome logged, no resends.
+      const [repository, coordinator, target, source] = args;
+      yield* registry.load(repository, coordinator);
+      const socket = herdrSocket();
+      const worker = yield* agentGet(socket, target);
+      const label = worker.name ?? worker.pane_id;
+      const log = (line: string) => process.stdout.write(`${new Date().toISOString()} ${line}\n`);
+      log(
+        `observing ${label} (${worker.pane_id}, ${worker.agent_status}) for ${name({ repository, coordinator } as Binding)}`,
+      );
+      return yield* follow(socket, worker, async (stop) => {
+        const revision = `${stop.to}@${stop.at.toISOString()}`;
+        const outcome = await Effect.runPromise(
+          registry
+            .wake(repository, coordinator, { sender: `herdr-observer:${label}`, source, revision })
+            .pipe(
+              Effect.map((result) => result.trim()),
+              Effect.catch((error) => Effect.succeed(`not woken: ${describe(error)}`)),
+            ),
+        );
+        log(`${label} ${stop.from} -> ${stop.to}: ${outcome}`);
+      });
     }
     case "unbind": {
       const record = yield* registry.unbind(args[0], args[1], args[2]);
