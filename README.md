@@ -121,8 +121,10 @@ mount. Tool installations, credentials and paths are configured on each machine.
 
 ## Teach the agent to use Herdsman
 
-Install the [operating skill](skills/herdsman/SKILL.md) as well as configuring the
-receiver. The adapter delivers events; the skill explains binding, save-before-wake,
+The Pi package installation below installs both the receiver extension and the
+[operating skill](skills/herdsman/SKILL.md). For CC, or skill-only use without an
+inbound receiver, use the links below. The adapter delivers events; the skill explains binding,
+save-before-wake,
 reconciliation, uncertain delivery, review handling and recovery. Neither grants
 authority: the agent still needs an explicit assignment.
 
@@ -167,57 +169,109 @@ Herdsman skill when using this integration, rather than maintaining another copy
 of its procedure. If unavailable, point them explicitly at this checkout's
 `skills/herdsman/SKILL.md`.
 
-## Start a receiver
+## Install receiver support once per machine
 
-From this checkout:
+From the reviewed checkout:
 
 ```sh
 npm ci
-npm run check
-npm test
-export HERDSMAN_DIR="$PWD"
-mkdir -p .local
-chmod 700 .local
+npm run validate
+export HERDSMAN_DIR="$(pwd -P)"
 ```
 
-The socket's parent must already exist, be owned by the current user, and have no
-group/other access. The listener never unlinks an occupied or stale socket on
-startup. After a crash, verify the old receiver is dead before removing its socket.
+Installing support is separate from assigning a coordinator role. Each loaded
+receiver allocates its own private temporary directory and socket by default.
+Normal shutdown/session replacement closes the listener and removes that owned
+directory. A crash may leave its directory behind; later sessions choose new paths
+rather than taking it over. No coordinator bindings are created automatically.
 
 ### Pi
 
+Install this local Pi package once:
+
 ```sh
-HERDSMAN_SOCKET="$HERDSMAN_DIR/.local/pi.sock" \
-  pi --extension "$HERDSMAN_DIR/src/pi.ts"
+pi install "$HERDSMAN_DIR"
 ```
 
-The extension opens its listener on session start and closes it on shutdown. It
-uses `pi.sendMessage()` with `customType: "herdsman-wake"`, `triggerTurn: true` and
-`deliverAs: "followUp"`. It does not call an editor or synthesize keystrokes.
+The manifest supplies the receiver extension and canonical skill. Fresh Pi sessions
+now start their own receivers without environment variables or hand-written loaders.
+Existing sessions need a normal user `/reload`; Herdsman never types it for them.
+Remove the old one-session spike loader when migrating, so it does not compete with
+the package. Package installation is explicit trust in executable extension code.
 
-An optional programmatic `sessionFile` guard restricts an explicitly installed
-loader to one conversation. Installing the adapter into an already-running Pi
-requires a normal resource reload; Herdsman does not type `/reload` for you.
+Before each agent run, the extension supplies a structured `herdsman_receiver`
+context section containing **this session's** socket, instance, checkout and skill
+path. It preserves other prompt sections and never touches the input editor or
+starts a model turn merely to announce readiness. A startup failure is reported,
+not advertised as a usable receiver.
+
+The coordinator reads its durable role/assignment, inspects existing registrations
+and binds its assigned namespace/ID to that endpoint within its runtime authority.
+Installed-but-unbound is a setup step, not missing software. If a reload or permission
+is still needed, report that blocker rather than quietly dispatching without wakes.
+
+For an isolated invocation without a persistent installation:
+
+```sh
+pi --extension "$HERDSMAN_DIR"
+```
+
+The listener starts on session start and closes on shutdown/replacement. Delivery
+still uses `pi.sendMessage()` with an attributed custom follow-up. The optional
+programmatic `sessionFile` guard remains available for isolated tests, but is not
+part of ordinary installation.
 
 ### Claude Code
 
-Run from this checkout because the example MCP config uses relative paths:
+Register the server once at user scope after inspecting any existing entry:
 
 ```sh
-HERDSMAN_SOCKET="$HERDSMAN_DIR/.local/cc.sock" claude \
-  --strict-mcp-config --mcp-config "$HERDSMAN_DIR/.mcp.example.json" \
-  --dangerously-load-development-channels server:herdsman \
-  --tools Read,Bash
+claude mcp get herdsman
+# Only add if absent; do not overwrite another configured server.
+claude mcp add --scope user --transport stdio herdsman -- \
+  npm --prefix "$HERDSMAN_DIR" run --silent cc
 ```
 
-Custom Channels are a research-preview feature requiring explicit consent and
-supported Anthropic authentication/account policy. The development flag opts the
-channel into that feature; it is not a tool-permission bypass. Confirm the channel
-registered and processes a test event; a listening socket alone is insufficient.
+This command records the absolute checkout path and works from other directories.
+It does not opt a session into experimental channels or approve trust prompts.
 
-The adapter declares only `claude/channel`. It provides no reply tool or permission
-relay. Configure the session's instructions and tool permissions for its actual
-assignment; the example tool list is not a sandbox.
+Start sessions that need to **receive** notifications with:
+
+```sh
+claude --dangerously-load-development-channels server:herdsman
+```
+
+Each adapter process allocates a different endpoint. Its MCP initialization
+instructions identify that endpoint and the local checkout to Claude. The adapter
+does not accept delivery before MCP initialization. CC must also have registered
+the channel: confirm its startup notice and a processed test event. A listening
+socket or successful MCP initialization alone does not prove channel opt-in.
+
+Custom Channels require explicit consent and supported Anthropic authentication/
+account policy. The development flag enables the research-preview channel, not
+unattended tool approval. Already-running CC sessions need a restart with the
+appropriate configuration to gain the receiver; do not restart unrelated work.
+
+The adapter declares only `claude/channel`: no reply tool or permission relay.
+A worker that only **sends** named updates to its coordinator needs the CLI and the
+coordinator's binding, not a CC receiver or channel opt-in of its own. Pi and CC can
+each be a coordinator or worker; the harness does not determine the role.
+
+The project-local `.mcp.example.json` remains an alternative when launching from
+this checkout with an explicit MCP config.
+
+### Explicit sockets and migration
+
+`HERDSMAN_SOCKET` (or the Pi adapter's programmatic socket option) still overrides
+automatic allocation for isolated setups. Its parent must already be an owned
+private directory with no group/other access. Never export one fixed socket for
+all sessions. Collisions fail closed; the listener never removes another endpoint.
+Explicit socket parent directories remain caller-owned.
+
+Reload/restart changes the instance, and automatic sockets also change path.
+Old named records remain stale/offline until explicitly retired after checking
+ownership. The coordinator then binds its current advertised endpoint; the runtime
+does not silently reclaim registrations or grant takeover authority.
 
 ## Bind and notify a coordinator
 
@@ -239,14 +293,16 @@ Then, from the Herdsman checkout:
 
 ```sh
 npm run coordinator -- bind example/plans orion-production \
-  /absolute/path/to/plans "$HERDSMAN_DIR/.local/pi.sock"
+  /absolute/path/to/plans "$SOCKET"
 npm run coordinator -- list example/plans
 npm run coordinator -- show example/plans orion-production
 npm run coordinator -- wake example/plans orion-production \
   database-worker handoffs/database--prepare.md revision-1
 ```
 
-`example/plans` is a logical namespace; the CLI does not fetch that repository.
+Set SOCKET from this session's receiver context/instructions, not another pane or
+a guessed temporary path. `example/plans` is a logical namespace; the CLI does not
+fetch that repository.
 An optional final `bind` argument records a verified Herdr pane ID. It is a local
 navigation hint, not ownership proof. Discover it rather than using a focused pane
 or an inherited ID from before a pane move.
@@ -373,10 +429,15 @@ braces, duplicate imports and explicit-any rejection. Formatting uses 100-column
 lines. `npm run check`, `npm run lint`, `npm run format:check` and `npm test` can also
 run separately.
 
-The current suite has **23 tests** covering transport, adapter contracts, named
+The current suite has **26 tests** covering transport, adapter contracts, named
 routing, stale/legacy receivers, source-path containment, shared-context discovery,
 fresh-checkout binding and review decision/routing behavior. Additional checks cover
 branded IDs, schema variants and injected transport without uncertain-send retries.
+Receiver-bootstrap tests cover isolated fresh Pi/CC endpoints, context publication,
+startup failure, session replacement and cleanup. Two isolated real Pi RPC processes
+also loaded the package and exposed distinct identity endpoints on Linux without
+model calls. CC endpoint publication/delivery is verified with real MCP clients;
+interactive channel consent remains a separate harness requirement.
 The bundled skill is checked by Pi's pinned parser both directly and through a symlink;
 this does not claim a live model loaded it or verify CC's interactive discovery.
 Review tests simulate
@@ -409,7 +470,8 @@ status and entry variants use tagged schemas. A brand is acquired through valida
 not by asserting that an arbitrary string is a coordinator ID.
 
 Source layout: `bridge.ts` owns the listener, `pi.ts`/`cc.ts` adapt the harnesses,
-`client.ts` implements wake transport, `registry.ts` owns bindings, `coordinator.ts`
+`receiver.ts` owns automatic socket allocation and endpoint context, `client.ts`
+implements wake transport, `registry.ts` owns bindings, `coordinator.ts`
 dispatches CLI commands, and `review.ts` owns review orchestration and its platform adapter.
 
 [pi]: https://github.com/earendil-works/pi
