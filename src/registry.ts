@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { CoordinatorId } from "./domain.ts";
+import type { Receiver } from "./receiver.ts";
 import { Wake, assertPrivateDirectory } from "./bridge.ts";
 import { Offline, Rejected, Stale, Uncertain, WakeTransport, WakeTransportLive } from "./client.ts";
 
@@ -305,25 +306,36 @@ const makeRegistry = Effect.fn("Registry.make")(function* (dir: string) {
     return { record, status: yield* probe(record), profile };
   });
 
-  // Never refreshes a stale instance and never retries: the receiver rejects a
-  // changed instance, and an uncertain outcome is reported, not resent.
-  const wake = Effect.fn("Registry.wake")(function* (
-    repository: string,
-    coordinator: string,
-    input: {
-      sender: string;
-      source: string;
-      revision: string;
-    },
+  // Assignment-owned worker endpoints need no durable coordinator profile. Both
+  // routes use the same source containment and mandatory receiver-instance pin.
+  const wakeReceiver = Effect.fn("Registry.wakeReceiver")(function* (
+    receiver: Receiver & { plansRoot: string },
+    input: Wake,
   ) {
-    const record = yield* load(repository, coordinator);
-    const source = yield* resolveInside(record.plansRoot, input.source, "Source");
+    if (!isAbsolute(receiver.plansRoot) || !isAbsolute(receiver.socket)) {
+      return yield* invalid("Plans root and receiver socket must be absolute paths");
+    }
+    if (!receiver.instance) {
+      return yield* invalid("Receiver instance is required; unpinned delivery is not allowed");
+    }
+    const root = yield* io("Plans root", () => realpath(receiver.plansRoot));
+    const source = yield* resolveInside(root, input.source, "Source");
     const event = yield* Schema.decodeUnknownEffect(Wake)({ ...input, source }).pipe(
       Effect.mapError(
         () => new Invalid({ message: "Sender, source and revision must be 1-2048 characters" }),
       ),
     );
-    return yield* transport.send(record.socket, event, record.instance);
+    return yield* transport.send(receiver.socket, event, receiver.instance);
+  });
+
+  // Named sends never fall back to an explicit endpoint or refresh a stale pin.
+  const wake = Effect.fn("Registry.wake")(function* (
+    repository: string,
+    coordinator: string,
+    input: Wake,
+  ) {
+    const record = yield* load(repository, coordinator);
+    return yield* wakeReceiver(record, input);
   });
 
   // Removes only the record holding the expected instance. The record is moved
@@ -377,7 +389,7 @@ const makeRegistry = Effect.fn("Registry.make")(function* (dir: string) {
     return yield* Effect.fail(new InstanceMismatch({ record: taken! }));
   });
 
-  return { load, bind, probe, list, show, wake, unbind };
+  return { load, bind, probe, list, show, wake, wakeReceiver, unbind };
 });
 
 export type RegistryApi = Effect.Success<ReturnType<typeof makeRegistry>>;

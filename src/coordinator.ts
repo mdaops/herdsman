@@ -14,6 +14,7 @@ const usage = `Usage: npm run coordinator -- <command>
   show <repository-id> <coordinator-id>
   wake <repository-id> <coordinator-id> <sender> <repo-relative-source> <revision>
   unbind <repository-id> <coordinator-id> <expected-instance>
+  wake-receiver <absolute-plans-root> <absolute-socket> <expected-instance> <sender> <repo-relative-source> <revision>
 `;
 
 const status = Match.type<Status>().pipe(
@@ -55,6 +56,7 @@ const arity: Record<string, [number, number]> = {
   show: [2, 2],
   wake: [5, 5],
   unbind: [3, 3],
+  "wake-receiver": [6, 6],
 };
 const run = Effect.gen(function* () {
   const registry = yield* Registry;
@@ -101,6 +103,13 @@ const run = Effect.gen(function* () {
     case "wake": {
       const [repository, coordinator, sender, source, revision] = args;
       return yield* registry.wake(repository, coordinator, { sender, source, revision });
+    }
+    case "wake-receiver": {
+      const [plansRoot, socket, instance, sender, source, revision] = args;
+      return yield* registry.wakeReceiver(
+        { plansRoot, socket, instance },
+        { sender, source, revision },
+      );
     }
     case "unbind": {
       const record = yield* registry.unbind(args[0], args[1], args[2]);
