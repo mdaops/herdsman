@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "herdsman": {
+      "command": "node",
+      "args": ["--import", "tsx", "src/cc.ts"]
+    }
+  }
+}
