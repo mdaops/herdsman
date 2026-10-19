@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 import {
   type Binding,
   type RegistryError,
@@ -16,44 +16,37 @@ const usage = `Usage: npm run coordinator -- <command>
   unbind <repository-id> <coordinator-id> <expected-instance>
 `;
 
-const status = (s: Status) =>
-  s._tag === "Live"
-    ? "live"
-    : s._tag === "Stale"
-      ? "stale"
-      : s._tag === "Offline"
-        ? "offline"
-        : `unreachable (${s.reason})`;
+const status = Match.type<Status>().pipe(
+  Match.tagsExhaustive({
+    Live: () => "live",
+    Stale: () => "stale",
+    Offline: () => "offline",
+    Unreachable: (s) => `unreachable (${s.reason})`,
+  }),
+);
 const name = (record: Binding) => `${record.repository} ${record.coordinator}`;
 
-function describe(error: RegistryError) {
-  switch (error._tag) {
-    case "Invalid":
-      return error.message;
-    case "Unbound":
-      return `No binding for ${error.repository} ${error.coordinator}`;
-    case "AlreadyBound":
-      return (
-        `${name(error.record)} is already bound to instance ${error.record.instance} ` +
-        `at ${error.record.socket}; unbind that exact instance first`
-      );
-    case "InstanceMismatch":
-      return `${name(error.record)} is bound to instance ${error.record.instance}; nothing removed`;
-    case "Displaced":
-      return `A concurrent bind replaced the record; the non-matching record was left at ${error.path}`;
-    case "Offline":
-      return `Coordinator offline: nothing listening at ${error.socket} (no request delivered)`;
-    case "Stale":
-      return (
-        `Binding is stale: receiver at ${error.socket} is no longer instance ${error.instance}; not delivered. ` +
-        `Unbind and bind again after verifying the coordinator`
-      );
-    case "Rejected":
-      return `Receiver rejected the request (HTTP ${error.status}): ${error.message}`;
-    case "Uncertain":
-      return `Delivery outcome uncertain: ${error.cause}. Reconcile before resending; do not retry blindly`;
-  }
-}
+const describe = Match.type<RegistryError>().pipe(
+  Match.tagsExhaustive({
+    Invalid: (error) => error.message,
+    Unbound: (error) => `No binding for ${error.repository} ${error.coordinator}`,
+    AlreadyBound: (error) =>
+      `${name(error.record)} is already bound to instance ${error.record.instance} ` +
+      `at ${error.record.socket}; unbind that exact instance first`,
+    InstanceMismatch: (error) =>
+      `${name(error.record)} is bound to instance ${error.record.instance}; nothing removed`,
+    Displaced: (error) =>
+      `A concurrent bind replaced the record; the non-matching record was left at ${error.path}`,
+    Offline: (error) =>
+      `Coordinator offline: nothing listening at ${error.socket} (no request delivered)`,
+    Stale: (error) =>
+      `Binding is stale: receiver at ${error.socket} is no longer instance ${error.instance}; not delivered. ` +
+      `Unbind and bind again after verifying the coordinator`,
+    Rejected: (error) => `Receiver rejected the request (HTTP ${error.status}): ${error.message}`,
+    Uncertain: (error) =>
+      `Delivery outcome uncertain: ${error.cause}. Reconcile before resending; do not retry blindly`,
+  }),
+);
 
 const [command, ...args] = process.argv.slice(2);
 const arity: Record<string, [number, number]> = {
