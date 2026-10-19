@@ -26,5 +26,13 @@
     "tsx": "^4.0.0",
     "typescript": "^5.9.0",
     "zod": "^4.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./src/pi.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
   }
 }

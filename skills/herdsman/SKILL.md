@@ -34,13 +34,18 @@ assignment scope, merge rights or deployment authority. Sender labels are not au
    reference and respect assignment/write ownership rather than forbidding shared reading.
 2. Reconcile new or changed authoritative handoffs before waiting for events. Use recorded source
    revisions to avoid repeating completed work. Do not rely on old transcripts or wake history.
-3. If runtime setup is authorized, follow the README's Pi-extension or CC-channel instructions.
-   Use an owned private socket directory and a distinct socket per receiver. Never unlink an
-   occupied socket without verifying the old process is dead and cleanup is authorized.
-4. Pi may require a user /reload. CC requires interactive trust/channel consent and supported
-   authentication. Report these setup steps; do not inject commands or impersonate consent.
-5. Inspect existing registrations before binding this verified session/receiver. Do not refresh
-   a stale binding automatically or mistake a focused pane for the intended coordinator.
+3. Distinguish missing software from installed-but-unbound support. If absent, retain the
+   authorized durable handoff workflow; do not install implicitly. If installed and runtime setup
+   is authorized, complete binding before dispatch instead of silently omitting return wakes.
+4. Normal Pi package installation starts a private receiver in every fresh session. Read THIS
+   session's herdsman_receiver context for socket, instance and checkout. CC's adapter supplies
+   its endpoint through MCP instructions; receiving also requires explicit channel opt-in and
+   consent. Never infer endpoints from a focused pane, another session or temporary-file searches.
+5. Inspect existing registrations before binding this verified session/receiver to its assigned
+   namespace/ID. No per-session loader or hand-selected socket is needed. Setup is the coordinator's
+   responsibility; ask the human only for unavailable permissions or required reload/consent.
+   Existing Pi sessions may need /reload; existing CC sessions may need a configured restart.
+   Never inject those actions into an editor. Do not automatically reclaim stale registrations.
 
 Use the CLI from any working directory:
 
@@ -51,7 +56,8 @@ npm --prefix "$HERDSMAN_DIR" run coordinator -- bind \
   "$REPOSITORY_ID" "$COORDINATOR_ID" "$PLANS_DIR" "$SOCKET"
 ```
 
-Set those variables to verified values first. Plans root and socket must be absolute paths.
+Set those variables to verified values first; SOCKET comes from the current receiver context.
+Plans root and socket must be absolute paths.
 Bind requires coordinators/<id>.md in that checkout. An optional final bind argument is a verified
 Herdr pane ID. It is navigation metadata, not proof of ownership. Registration never replaces an
 existing record. Explicit retirement requires the expected instance:
@@ -65,6 +71,10 @@ Unbind neither stops an agent nor transfers durable ownership. Local records liv
 HERDSMAN_STATE_DIR, defaulting to ~/.local/state/herdsman. Never sync them as durable work state.
 
 ## Worker reporting and wake reconciliation
+
+A worker only sending updates needs the CLI and the coordinator's verified binding, not its own
+receiver. If launching CC to receive wakes too, include the documented channel opt-in flag and
+verify consent/registration; a bare CC launch is not proof of inbound readiness.
 
 Before dispatch, establish the worker's scope, owned files, reporting destination, publication
 permissions and authority to reconcile relevant wake hints. Supply the coordinator's namespace
