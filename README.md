@@ -53,9 +53,10 @@ remain unavailable on the next machine. Git is not a distributed ownership lock.
 - Uses Herdr notifications to bring a human to the relevant review link.
 
 The workflow around it uses one Herdr space per coordinator, with labelled worker
-tabs. My coordinator/plan skills live separately in `mdaops/dotfiles`, and durable
-workflow documents live in the plans repository. This repository supplies the
-runtime primitives; it does not install those skills or automatically move panes.
+tabs. The canonical [Herdsman operating skill](skills/herdsman/SKILL.md) ships here.
+My broader coordinator/plan skills live separately in `mdaops/dotfiles` and reference
+that skill; durable workflow documents live in the plans repository. Installation is
+explicit: the runtime does not install skills or automatically move panes.
 
 ## Architecture
 
@@ -117,6 +118,54 @@ The CC adapter uses the MCP SDK over stdio.
 
 Under WSL, keep sockets and runtime state on its Linux filesystem, not a Windows
 mount. Tool installations, credentials and paths are configured on each machine.
+
+## Teach the agent to use Herdsman
+
+Install the [operating skill](skills/herdsman/SKILL.md) as well as configuring the
+receiver. The adapter delivers events; the skill explains binding, save-before-wake,
+reconciliation, uncertain delivery, review handling and recovery. Neither grants
+authority: the agent still needs an explicit assignment.
+
+From the reviewed checkout root, link the canonical directory into the relevant
+harness locations. Install just the harness you use, or both:
+
+```sh
+export HERDSMAN_DIR="$(pwd -P)"
+for root in "$HOME/.agents/skills" "$HOME/.claude/skills"; do
+  dest="$root/herdsman"
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    printf 'Already exists; inspect rather than overwrite: %s\n' "$dest"
+  else
+    mkdir -p "$root"
+    ln -s "$HERDSMAN_DIR/skills/herdsman" "$dest"
+  fi
+done
+```
+
+- **Pi:** discovers `~/.agents/skills/herdsman/SKILL.md`. Reload resources with
+  `/reload` or start a new session; invoke explicitly with `/skill:herdsman`.
+  Reload also replaces any active Herdsman receiver instance: inspect and explicitly
+  retire/rebind its old registration as described below.
+- **Claude Code:** discovers `~/.claude/skills/herdsman/SKILL.md`, including symlinked
+  directories. In a new session, verify `/herdsman` appears and invoke it explicitly
+  if needed. See the [Claude Code skills documentation][cc-skills].
+- For project-only installation, use the project `.agents/skills/` location for Pi
+  or `.claude/skills/` for CC instead. Respect project trust prompts.
+
+Keep one active copy per harness to avoid name collisions or stale instructions.
+If copying instead of linking, set HERDSMAN_DIR to the runtime checkout: copied
+instructions do not include the runtime. If moving machines/checkouts, recreate
+links locally. The skill resolves symlinks before using its checkout-relative paths.
+
+Verify discovery in the actual harness; a filesystem link alone does not prove the
+model loaded the skill. Do not type reload commands into another person's editor.
+Loading the skill does not start a receiver, bind a coordinator, alter tool
+permissions or approve a channel consent prompt. Follow the setup below separately.
+
+Your coordinator-start/dispatch instructions should say to read the installed
+Herdsman skill when using this integration, rather than maintaining another copy
+of its procedure. If unavailable, point them explicitly at this checkout's
+`skills/herdsman/SKILL.md`.
 
 ## Start a receiver
 
@@ -324,10 +373,12 @@ braces, duplicate imports and explicit-any rejection. Formatting uses 100-column
 lines. `npm run check`, `npm run lint`, `npm run format:check` and `npm test` can also
 run separately.
 
-The current suite has **22 tests** covering transport, adapter contracts, named
+The current suite has **23 tests** covering transport, adapter contracts, named
 routing, stale/legacy receivers, source-path containment, shared-context discovery,
 fresh-checkout binding and review decision/routing behavior. Additional checks cover
 branded IDs, schema variants and injected transport without uncertain-send retries.
+The bundled skill is checked by Pi's pinned parser both directly and through a symlink;
+this does not claim a live model loaded it or verify CC's interactive discovery.
 Review tests simulate
 human decisions; they do not constitute human approval.
 
@@ -363,3 +414,4 @@ dispatches CLI commands, and `review.ts` owns review orchestration and its platf
 
 [pi]: https://github.com/earendil-works/pi
 [cc]: https://code.claude.com/docs/en/channels-reference
+[cc-skills]: https://code.claude.com/docs/en/skills
