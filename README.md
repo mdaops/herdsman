@@ -388,6 +388,29 @@ This explicit worker route shares the same source validation and pinned transpor
 as named delivery. It is **not** an automatic fallback for a failed named send.
 No durable worker directory, scheduler or broker is added.
 
+### Worker stop observer
+
+Workers are told to save a handoff and wake their coordinator whenever they stop,
+including when blocked or waiting. They can still forget. When a worker runs in a
+Herdr pane, the coordinator can start one long-lived observer per worker:
+
+```sh
+npm run coordinator -- observe example/plans orion-production \
+  database-worker plans/open/example.md
+```
+
+It resolves the worker through Herdr's `agent.get` and subscribes to that pane's
+`pane.agent_status_changed` events. Leaving `working` for `idle` or `done`, or
+becoming `blocked`, sends one named wake as `herdr-observer:<worker>`, with a
+`<status>@<time>` revision. The source should already exist, so pass the assignment
+plan rather than a handoff the worker has not written yet. Outcomes are logged and
+not retried. The observer exits when the pane closes, exits or moves, or when Herdr
+disconnects. It holds no state, so restart it after rediscovering the pane.
+
+It reports a stop; it decides nothing. The coordinator inspects the worker and its
+handoff, then reconciles, notifies the human, or acts within an explicit delegation.
+`HERDR_SOCKET_PATH` overrides the default `~/.config/herdr/herdr.sock`.
+
 ### Delivery contract
 
 ```json
